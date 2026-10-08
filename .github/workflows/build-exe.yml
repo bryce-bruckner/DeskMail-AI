@@ -21,11 +21,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Install Electron packaging tools & auto-updater
         run: npm install -D electron electron-builder electron-updater
@@ -34,9 +33,18 @@ jobs:
         run: npm run build
 
       - name: Compile Windows .exe Installer with Auto-Update Metadata
-        run: npx electron-builder --win nsis
+        run: npx --yes electron-builder --win nsis
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .exe to GitHub Actions Artifacts (Always available)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskMail-AI-Windows-Installer
+          path: |
+            dist-electron/*.exe
+            dist-electron/latest.yml
+          if-no-files-found: warn
 
       - name: Upload .exe and auto-updater files to GitHub Release
         uses: softprops/action-gh-release@v2
