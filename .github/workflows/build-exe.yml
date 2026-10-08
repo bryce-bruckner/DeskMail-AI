@@ -3,6 +3,9 @@ name: Build and Attach .exe to GitHub Release
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -24,21 +27,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Electron packaging tools
-        run: npm install -D electron electron-builder
+      - name: Install Electron packaging tools & auto-updater
+        run: npm install -D electron electron-builder electron-updater
 
       - name: Build web application
         run: npm run build
 
-      - name: Compile Windows .exe Installer
+      - name: Compile Windows .exe Installer with Auto-Update Metadata
         run: npx electron-builder --win nsis
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload .exe to GitHub Release
+      - name: Upload .exe and auto-updater files to GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
         with:
-          files: dist-electron/*.exe
+          files: |
+            dist-electron/*.exe
+            dist-electron/latest.yml
+            dist-electron/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

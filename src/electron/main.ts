@@ -76,3 +76,55 @@ export function createLocalOAuthCallbackServer(
 
   return server;
 }
+
+/**
+ * Auto-Updater Lifecycle Management
+ * Checks GitHub Releases for newer version tags and prompts the user to restart
+ */
+export function initializeAutoUpdater(mainWindow?: any) {
+  try {
+    // Safe dynamic require for packaged Electron environment
+    const { autoUpdater } = (globalThis as any).require ? (globalThis as any).require('electron-updater') : {};
+    if (!autoUpdater) return;
+
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('checking-for-update', () => {
+      console.log('[AutoUpdater] Checking for updates on GitHub...');
+    });
+
+    autoUpdater.on('update-available', (info: any) => {
+      console.log(`[AutoUpdater] Update available: ${info?.version}. Downloading in background...`);
+      mainWindow?.webContents?.send?.('updater:status', {
+        status: 'downloading',
+        version: info?.version,
+      });
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      console.log('[AutoUpdater] DeskMail is up to date.');
+    });
+
+    autoUpdater.on('error', (err: any) => {
+      console.warn('[AutoUpdater] Update check error:', err?.message || err);
+    });
+
+    autoUpdater.on('update-downloaded', (info: any) => {
+      console.log(`[AutoUpdater] Update ${info?.version} downloaded and ready.`);
+      mainWindow?.webContents?.send?.('updater:status', {
+        status: 'ready',
+        version: info?.version,
+      });
+    });
+
+    // Check for updates shortly after launch
+    setTimeout(() => {
+      autoUpdater.checkForUpdatesAndNotify().catch((err: any) => {
+        console.warn('[AutoUpdater] Check notification error:', err?.message);
+      });
+    }, 5000);
+  } catch (err) {
+    console.warn('[AutoUpdater] Auto-updater initialization skipped:', err);
+  }
+}
