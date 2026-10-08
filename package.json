@@ -9,7 +9,18 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "package:exe": "npm run build && electron-builder --win nsis"
+  },
+  "buildConfig": {
+    "appId": "com.deskmail.ai",
+    "productName": "DeskMail AI",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": "nsis"
+    }
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
