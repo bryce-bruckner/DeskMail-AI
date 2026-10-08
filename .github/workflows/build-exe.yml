@@ -24,7 +24,9 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: |
+          npm install --legacy-peer-deps
+          npm install -D @rolldown/binding-win32-x64-msvc --legacy-peer-deps || true
 
       - name: Install Electron packaging tools & auto-updater
         run: npm install -D electron electron-builder electron-updater --legacy-peer-deps
