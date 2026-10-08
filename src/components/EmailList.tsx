@@ -10,7 +10,6 @@ interface EmailListProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   currentCategoryTitle: string;
-  onResetSamples: () => void;
 }
 
 export const EmailList: React.FC<EmailListProps> = ({
@@ -21,7 +20,6 @@ export const EmailList: React.FC<EmailListProps> = ({
   searchQuery,
   onSearchChange,
   currentCategoryTitle,
-  onResetSamples,
 }) => {
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
   const [filterStarredOnly, setFilterStarredOnly] = useState(false);

@@ -1,6 +1,6 @@
 {
   "provider": "gemini",
-  "geminiModel": "gemini-3.8-flash",
+  "geminiModel": "gemini-flash-latest",
   "ollamaUrl": "http://localhost:11434",
   "ollamaModel": "llama3",
   "autoProcessNewEmails": true,

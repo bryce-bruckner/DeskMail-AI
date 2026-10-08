@@ -114,7 +114,12 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      showToast(err.message || 'Failed to sign in with Google', 'error');
+      const msg = err?.message || String(err);
+      if (msg.includes('unauthorized-domain') || msg.includes('popup-blocked')) {
+        showToast('Google Sign-In popup restricted by iframe. Exploring offline desktop store with live AI analysis!', 'info');
+      } else {
+        showToast(msg || 'Failed to sign in with Google', 'error');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -332,7 +337,7 @@ export default function App() {
   };
 
   // Clear cache
-  const handleResetToSeeds = async () => {
+  const handleClearCache = async () => {
     await desktopBridge.resetCache();
     await loadEmails();
     showToast('Local database cache cleared', 'info');
@@ -433,7 +438,6 @@ export default function App() {
               ? 'Needs Review / Low Confidence'
               : currentCategory
           }
-          onResetSamples={handleResetToSeeds}
         />
 
         {/* Right Email Detail & AI Action Pane */}
@@ -463,7 +467,7 @@ export default function App() {
         isOpen={isCacheModalOpen}
         onClose={() => setIsCacheModalOpen(false)}
         stats={cacheStats}
-        onResetToSeeds={handleResetToSeeds}
+        onClearCache={handleClearCache}
       />
 
       {/* Welcome & First-time User Modal */}

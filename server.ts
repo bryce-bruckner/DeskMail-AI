@@ -30,7 +30,7 @@ if (!fs.existsSync(DATA_DIR)) {
 // Default settings
 const DEFAULT_SETTINGS: AISettings = {
   provider: 'gemini',
-  geminiModel: 'gemini-3.8-flash',
+  geminiModel: 'gemini-flash-latest',
   ollamaUrl: 'http://localhost:11434',
   ollamaModel: 'llama3',
   autoProcessNewEmails: true,
@@ -42,14 +42,15 @@ const DEFAULT_SETTINGS: AISettings = {
 function readEmailsFromDb(): EmailRecord[] {
   try {
     if (!fs.existsSync(DB_FILE)) {
-      fs.writeFileSync(DB_FILE, JSON.stringify(INITIAL_SEED_EMAILS, null, 2), 'utf-8');
-      return INITIAL_SEED_EMAILS;
+      fs.writeFileSync(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
+      return [];
     }
     const data = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
     console.error('Error reading emails database:', err);
-    return INITIAL_SEED_EMAILS;
+    return [];
   }
 }
 
@@ -210,11 +211,16 @@ ${content}`;
   if (canMakeGeminiRequest()) {
     const ai = getGeminiClient();
     if (ai) {
-      try {
-        recordGeminiRequest();
-        const generatePromise = ai.models.generateContent({
-          model: settings.geminiModel || 'gemini-3.8-flash',
-          contents: `You are an elite desktop email manager AI.
+      const candidateModels = Array.from(
+        new Set([settings.geminiModel || 'gemini-flash-latest', 'gemini-flash-latest', 'gemini-3.8-flash'])
+      );
+
+      for (const modelToTry of candidateModels) {
+        try {
+          recordGeminiRequest();
+          const generatePromise = ai.models.generateContent({
+            model: modelToTry,
+            contents: `You are an elite desktop email manager AI.
 Analyze this email and provide structured classification, concise summary, and bullet-point draft reply suggestions.
 
 Requirements:
@@ -228,76 +234,81 @@ Requirements:
 
 Email to analyze:
 ${content}`,
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                category: {
-                  type: Type.STRING,
-                  description: 'Primary, Junk, or Needs Review',
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  category: {
+                    type: Type.STRING,
+                    description: 'Primary, Junk, or Needs Review',
+                  },
+                  summary: {
+                    type: Type.STRING,
+                    description: '1-2 sentence bullet points summarizing core message & deadlines',
+                  },
+                  suggested_reply_bullets: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: 'Bullet-point suggested draft replies',
+                  },
+                  confidence_score: {
+                    type: Type.NUMBER,
+                    description: 'Confidence between 0.0 and 1.0',
+                  },
+                  reasoning: {
+                    type: Type.STRING,
+                    description: 'Brief reason for the categorization',
+                  },
                 },
-                summary: {
-                  type: Type.STRING,
-                  description: '1-2 sentence bullet points summarizing core message & deadlines',
-                },
-                suggested_reply_bullets: {
-                  type: Type.ARRAY,
-                  items: { type: Type.STRING },
-                  description: 'Bullet-point suggested draft replies',
-                },
-                confidence_score: {
-                  type: Type.NUMBER,
-                  description: 'Confidence between 0.0 and 1.0',
-                },
-                reasoning: {
-                  type: Type.STRING,
-                  description: 'Brief reason for the categorization',
-                },
+                required: ['category', 'summary', 'suggested_reply_bullets'],
               },
-              required: ['category', 'summary', 'suggested_reply_bullets'],
             },
-          },
-        });
+          });
 
-        // 14-second safety timeout
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Gemini API timeout')), 14000)
-        );
+          // 14-second safety timeout
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Gemini API timeout')), 14000)
+          );
 
-        const response = await Promise.race([generatePromise, timeoutPromise]);
+          const response = await Promise.race([generatePromise, timeoutPromise]);
+          const responseText = response.text?.trim();
+          if (responseText) {
+            const parsed = JSON.parse(responseText);
+            let category: EmailCategory = 'Needs Review';
+            if (parsed.category === 'Primary' || parsed.category === 'Junk' || parsed.category === 'Needs Review') {
+              category = parsed.category;
+            } else if (parsed.category?.toLowerCase().includes('primary')) {
+              category = 'Primary';
+            } else if (parsed.category?.toLowerCase().includes('junk')) {
+              category = 'Junk';
+            }
 
-        const responseText = response.text?.trim();
-        if (responseText) {
-          const parsed = JSON.parse(responseText);
-          let category: EmailCategory = 'Needs Review';
-          if (parsed.category === 'Primary' || parsed.category === 'Junk' || parsed.category === 'Needs Review') {
-            category = parsed.category;
-          } else if (parsed.category?.toLowerCase().includes('primary')) {
-            category = 'Primary';
-          } else if (parsed.category?.toLowerCase().includes('junk')) {
-            category = 'Junk';
+            return {
+              category,
+              summary: parsed.summary || 'Summary generated.',
+              suggested_reply_bullets: Array.isArray(parsed.suggested_reply_bullets)
+                ? parsed.suggested_reply_bullets
+                : ['Acknowledge email.'],
+              confidence_score: parsed.confidence_score ?? 0.95,
+              reasoning: parsed.reasoning || `Categorized with Gemini (${modelToTry}).`,
+            };
           }
-
-          return {
-            category,
-            summary: parsed.summary || 'Summary generated.',
-            suggested_reply_bullets: Array.isArray(parsed.suggested_reply_bullets)
-              ? parsed.suggested_reply_bullets
-              : ['Acknowledge email.'],
-            confidence_score: parsed.confidence_score ?? 0.92,
-            reasoning: parsed.reasoning || 'Categorized with Gemini 3.8 Flash.',
-          };
-        }
-      } catch (geminiErr: any) {
-        const errMsg = geminiErr?.message || String(geminiErr);
-        if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
-          console.warn('[AI Engine] Rate limit reached. Backing off for 15s; falling back to heuristic engine.');
-          rateLimitCoolOffUntil = Date.now() + 15000;
-        } else if (errMsg.includes('timeout')) {
-          console.warn('[AI Engine] Request timed out; falling back to heuristic engine.');
-        } else {
-          console.warn('[AI Engine] Non-fatal Gemini error, falling back to heuristic engine:', errMsg);
+        } catch (geminiErr: any) {
+          const errMsg = geminiErr?.message || String(geminiErr);
+          if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED')) {
+            console.warn(`[AI Engine] Rate limit reached on ${modelToTry}. Backing off for 15s.`);
+            rateLimitCoolOffUntil = Date.now() + 15000;
+            break;
+          } else if (errMsg.includes('503') || errMsg.includes('high demand') || errMsg.includes('UNAVAILABLE')) {
+            console.warn(`[AI Engine] Model ${modelToTry} busy (503). Trying fallback candidate...`);
+            continue;
+          } else if (errMsg.includes('timeout')) {
+            console.warn(`[AI Engine] Request timed out on ${modelToTry}.`);
+            continue;
+          } else {
+            console.warn(`[AI Engine] Gemini error on ${modelToTry}:`, errMsg);
+          }
         }
       }
     }
@@ -313,51 +324,63 @@ function fallbackRuleEngine(email: { subject: string; from: string; bodyText: st
   
   const junkTriggers = [
     'unsubscribe', 'opt-out', 'newsletter', 'flash sale', 'discount', 'percent off',
-    'promo', 'marketing', 'receipt for', 'invoice #', 'order confirmation', 'deals', 'special offer'
+    'promo', 'marketing', 'receipt for', 'invoice #', 'order confirmation', 'deals', 'special offer',
+    'coupon', 'sale ends', 'limited time'
   ];
   const primaryTriggers = [
     'urgent', 'deadline', 'sign-off', 'contract', 'proposal', 'asap', 'meeting tomorrow',
-    'review needed', 'approval', 'confidential', 'roadmap', 'schedule a call'
+    'review needed', 'approval', 'confidential', 'roadmap', 'schedule a call', 'audit',
+    'budget', 'compliance', 'legal', 'kickoff', 'security alert', 'action item'
   ];
 
   const hasJunk = junkTriggers.some((kw) => text.includes(kw));
   const hasPrimary = primaryTriggers.some((kw) => text.includes(kw));
 
+  const sentences = email.bodyText.split(/(?<=[.?!])\s+/);
+  const deadlineSentence = sentences.find((s) => {
+    const l = s.toLowerCase();
+    return l.includes('by ') || l.includes('deadline') || l.includes('tomorrow') || l.includes('pm') || l.includes('am') || l.includes('due');
+  });
+
   if (hasJunk && !hasPrimary) {
+    const senderName = email.from.split('@')[0].replace(/[._-]/g, ' ');
     return {
       category: 'Junk',
-      summary: `• Promotional or automated message from ${email.from.split('@')[0]}.`,
+      summary: `• Promotional or automated broadcast from ${senderName}.\n• Routine notice; no action or personal reply required.`,
       suggested_reply_bullets: [
-        'No response required (automated notice or marketing blast).',
-        'Unsubscribe if no longer relevant.'
+        'No reply necessary (automated marketing broadcast or receipt).',
+        'Unsubscribe or archive if promotional updates are not needed.'
       ],
-      confidence_score: 0.9,
-      reasoning: 'Identified promotional keywords or automated receipts.',
+      confidence_score: 0.94,
+      reasoning: 'Identified marketing keywords, discount promotions, or automated transaction receipts.',
     };
   }
 
-  if (hasPrimary && !hasJunk) {
+  if (hasPrimary || (!hasJunk && text.includes('?'))) {
+    const deadlineNote = deadlineSentence ? ` Deadline/timing mention: "${deadlineSentence.trim().slice(0, 100)}"` : '';
     return {
       category: 'Primary',
-      summary: `• Direct communication regarding "${email.subject}" requiring review or timely response.`,
+      summary: `• Direct communication regarding "${email.subject}".${deadlineNote ? `\n•${deadlineNote}` : '\n• Action item or response requested.'}`,
       suggested_reply_bullets: [
-        'Confirm receipt and state that a detailed response is being prepared.',
-        'Acknowledge timeline and propose next steps.'
+        `Confirm receipt of "${email.subject}" and state that you are actively reviewing.`,
+        'Confirm availability and propose next steps.',
+        'Request additional context or attachments if needed.'
       ],
-      confidence_score: 0.88,
-      reasoning: 'Contains actionable work keywords and priority requests.',
+      confidence_score: 0.91,
+      reasoning: 'Contains actionable work keywords, direct questions, or prioritized schedule requests.',
     };
   }
 
   return {
     category: 'Needs Review',
-    summary: `• Incoming email regarding "${email.subject}". Review sender and context to determine priority.`,
+    summary: `• Incoming email regarding "${email.subject}".\n• Sender: ${email.from}. Review sender intent to determine priority.`,
     suggested_reply_bullets: [
-      'Thank sender for reaching out and request additional details.',
-      'Acknowledge email and set expectation on next response.'
+      'Thank sender for reaching out and ask for asynchronous details.',
+      'Politely decline if this outreach is outside current scope.',
+      'Schedule a brief 10-minute touchpoint if collaboration is relevant.'
     ],
-    confidence_score: 0.6,
-    reasoning: 'Ambiguous or mixed sender context; manual verification suggested.',
+    confidence_score: 0.65,
+    reasoning: 'Ambiguous or mixed sender context; manual verification recommended.',
   };
 }
 
@@ -600,10 +623,10 @@ app.get('/api/cache/stats', (req: Request, res: Response) => {
   res.json(stats);
 });
 
-// Reset cache to seed data
+// Reset cache
 app.post('/api/cache/reset', (req: Request, res: Response) => {
-  writeEmailsToDb(INITIAL_SEED_EMAILS);
-  res.json({ success: true, count: INITIAL_SEED_EMAILS.length });
+  writeEmailsToDb([]);
+  res.json({ success: true, count: 0 });
 });
 
 // Ingest from Gmail API

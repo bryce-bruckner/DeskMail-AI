@@ -6,17 +6,18 @@ interface CacheInspectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   stats: CacheStats | null;
-  onResetToSeeds: () => Promise<void>;
+  onClearCache: () => Promise<void>;
 }
 
 export const CacheInspectorModal: React.FC<CacheInspectorModalProps> = ({
   isOpen,
   onClose,
   stats,
-  onResetToSeeds,
+  onClearCache,
 }) => {
   const [isResetting, setIsResetting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   if (!isOpen) return null;
 
@@ -42,12 +43,10 @@ export const CacheInspectorModal: React.FC<CacheInspectorModalProps> = ({
   };
 
   const handleReset = async () => {
-    if (!confirm('Clear all cached emails from local storage?')) {
-      return;
-    }
     setIsResetting(true);
-    await onResetToSeeds();
+    await onClearCache();
     setIsResetting(false);
+    setConfirmClear(false);
     onClose();
   };
 
@@ -118,14 +117,37 @@ export const CacheInspectorModal: React.FC<CacheInspectorModalProps> = ({
               <span>{isExporting ? 'Exporting...' : 'Export Local Database (JSON / SQLite Schema)'}</span>
             </button>
 
-            <button
-              onClick={handleReset}
-              disabled={isResetting}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-rose-950/40 hover:bg-rose-950 text-rose-300 font-medium transition-colors border border-rose-900/60"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
-              <span>{isResetting ? 'Clearing...' : 'Clear Local Database Cache'}</span>
-            </button>
+            {!confirmClear ? (
+              <button
+                onClick={() => setConfirmClear(true)}
+                disabled={isResetting}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-rose-950/40 hover:bg-rose-950 text-rose-300 font-medium transition-colors border border-rose-900/60"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>Clear Local Cached Emails</span>
+              </button>
+            ) : (
+              <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-800 space-y-2">
+                <p className="text-[11px] text-rose-200 text-center font-medium">
+                  Clear all emails stored in local cache?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmClear(false)}
+                    className="flex-1 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    disabled={isResetting}
+                    className="flex-1 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition-colors"
+                  >
+                    {isResetting ? 'Clearing...' : 'Confirm Clear'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

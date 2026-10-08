@@ -1,28 +1,30 @@
 {
-  "name": "react-example",
+  "name": "deskmail-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist dist-electron",
     "lint": "tsc --noEmit",
-    "package:exe": "npm run build && electron-builder --win nsis"
+    "package:exe": "npm run build && electron-builder --win nsis",
+    "package:dir": "npm run build && electron-builder --dir"
   },
   "build": {
     "appId": "com.deskmail.ai",
     "productName": "DeskMail AI",
-    "publish": {
-      "provider": "github",
-      "owner": "bryce-bruckner",
-      "repo": "DeskMail-AI"
-    },
     "directories": {
       "output": "dist-electron"
     },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
     "win": {
       "target": "nsis"
     },
@@ -45,12 +47,14 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "typescript": "^7.0.2"
   }
 }
