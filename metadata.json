@@ -1,0 +1,7 @@
+{
+  "name": "Desktop Email Manager",
+  "description": "Desktop-grade email manager that ingests Gmail messages, categorizes them into Primary, Junk, and Needs Review, generates smart summaries, and suggests bullet-point draft replies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
