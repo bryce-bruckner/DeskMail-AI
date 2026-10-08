@@ -15,6 +15,11 @@
   "build": {
     "appId": "com.deskmail.ai",
     "productName": "DeskMail AI",
+    "publish": {
+      "provider": "github",
+      "owner": "bryce-bruckner",
+      "repo": "DeskMail-AI"
+    },
     "directories": {
       "output": "dist-electron"
     },
