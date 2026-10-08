@@ -28,33 +28,26 @@ jobs:
           npm install --legacy-peer-deps
           npm install -D @rolldown/binding-win32-x64-msvc --legacy-peer-deps || true
 
-      - name: Install Electron packaging tools & auto-updater
-        run: npm install -D electron electron-builder electron-updater --legacy-peer-deps
+      - name: Install Electron packaging tools
+        run: npm install -D electron electron-builder --legacy-peer-deps
 
       - name: Build web application
         run: npm run build
 
-      - name: Compile Windows .exe Installer with Auto-Update Metadata
-        run: npx --yes electron-builder --win nsis
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compile Windows .exe Installer
+        run: npx --yes electron-builder --win nsis --publish never
 
       - name: Upload .exe to GitHub Actions Artifacts (Always available)
         uses: actions/upload-artifact@v4
         with:
           name: DeskMail-AI-Windows-Installer
-          path: |
-            dist-electron/*.exe
-            dist-electron/latest.yml
+          path: dist-electron/*.exe
           if-no-files-found: warn
 
-      - name: Upload .exe and auto-updater files to GitHub Release
+      - name: Upload .exe to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
         with:
-          files: |
-            dist-electron/*.exe
-            dist-electron/latest.yml
-            dist-electron/*.blockmap
+          files: dist-electron/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
